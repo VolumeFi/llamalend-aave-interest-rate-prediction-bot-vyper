@@ -1,0 +1,5 @@
+name: llamalend-aave-interest-rate-prediction-bot-vyper
+
+vyper:
+  version: 0.3.10
+  evm_version: shanghai
