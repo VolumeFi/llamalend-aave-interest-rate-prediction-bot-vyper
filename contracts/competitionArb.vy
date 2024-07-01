@@ -18,8 +18,6 @@ struct WinnerInfo:
 
 struct BidInfo:
     sender: address
-    aave_version: uint256
-    chain_id: uint256
     token_asset: address
 
 struct SwapInfo:
@@ -45,8 +43,10 @@ epoch_cnt: public(uint256)
 active_epoch_num: public(uint256)
 epoch_info: public(HashMap[uint256, EpochInfo])
 bid_info: public(HashMap[uint256, DynArray[BidInfo, MAX_ENTRY]])
-my_info: public(HashMap[uint256, HashMap[address, BidInfo]])
+my_info: public(HashMap[uint256, HashMap[address, address]])
+latest_bid: public(HashMap[address, uint256])
 winner_info: public(HashMap[uint256, HashMap[address, uint256]])
+winner_token_asset: public(HashMap[uint256, address])
 claimable_amount: public(HashMap[address, uint256])
 
 interface ERC20:
@@ -63,20 +63,21 @@ interface CreateBotFactory:
         N: uint256, 
         callbacker: address, 
         callback_args: DynArray[uint256, 5], 
+        callback_bytes: Bytes[10**4],
+        is_new_market: bool,
         leverage: uint256, 
         deleverage_percentage: uint256, 
         health_threshold: uint256, 
         expire: uint256, 
         number_trades: uint256, 
         interval: uint256,
+        controller_idx: uint256 = 0,
         delegate: address = msg.sender
     ): payable
 
 event Bid:
     epoch_id: uint256
     sender: address
-    aave_version: uint256
-    chain_id: uint256
     token_asset: address
 
 event RewardSent:
@@ -89,6 +90,10 @@ event RewardSent:
 
 event SetPaloma:
     paloma: bytes32
+
+event SetWinnerAsset:
+    epoch_id: uint256
+    token_asset: address
 
 event UpdateCompass:
     old_compass: address
@@ -208,6 +213,45 @@ def send_reward(_daily_amount: uint256, _days: uint256):
     self.epoch_cnt = _epoch_cnt
 
 @external
+def bid(_token_asset: address):
+    _active_epoch_num: uint256 = self.active_epoch_num
+    _epoch_info: EpochInfo = self.epoch_info[_active_epoch_num]
+    
+    assert block.timestamp >= _epoch_info.competition_start, "Not Active 1"
+    assert block.timestamp < _epoch_info.competition_end, "Not Active 2"
+    assert _epoch_info.entry_cnt < MAX_ENTRY, "Entry Limited"
+    assert self.latest_bid[msg.sender] < _active_epoch_num, "Already bid"
+    assert _token_asset != empty(address), "Invalid"
+
+    _epoch_info.entry_cnt = unsafe_add(_epoch_info.entry_cnt, 1)
+
+    #Write
+    _bid_info: BidInfo = BidInfo({
+        sender: msg.sender,
+        aave_version: _aave_version,
+        chain_id: _chain_id,
+        token_asset: _token_asset
+    })
+    self.bid_info[_active_epoch_num].append(BidInfo({
+        # epoch_id: _active_epoch_num,
+        sender: msg.sender,
+        token_asset: _token_asset
+    }))
+    self.my_info[_active_epoch_num][msg.sender] = _token_asset
+    self.latest_bid[msg.sender] = _active_epoch_num
+    self.epoch_info[_active_epoch_num] = _epoch_info
+
+    # Event Log
+    log Bid(_active_epoch_num, msg.sender, _token_asset)
+
+@external
+def set_winner_asset(_epoch_id: uint256, _token_asset: address):
+    self._paloma_check()
+    self.winner_token_asset[_epoch_id] = _token_asset
+
+    log SetWinnerAsset(_epoch_id, _token_asset)
+
+@external
 def set_winner_list(_winner_infos: DynArray[WinnerInfo, MAX_ENTRY]):
     self._paloma_check()
 
@@ -233,34 +277,6 @@ def set_winner_list(_winner_infos: DynArray[WinnerInfo, MAX_ENTRY]):
     self.active_epoch_num = _next_epoch_num
 
 @external
-def bid(_token_asset: address, _chain_id: uint256, _aave_version: uint256):
-    _active_epoch_num: uint256 = self.active_epoch_num
-    _epoch_info: EpochInfo = self.epoch_info[_active_epoch_num]
-    
-    assert block.timestamp >= _epoch_info.competition_start, "Not Active 1"
-    assert block.timestamp < _epoch_info.competition_end, "Not Active 2"
-    assert _epoch_info.entry_cnt < MAX_ENTRY, "Entry Limited"
-    assert self.my_info[_active_epoch_num][msg.sender].token_asset == empty(address), "Already bid"
-    assert _token_asset != empty(address), "Invalid"
-    assert _chain_id > 0, "Shouldn't be zero"
-    assert _aave_version > 0, "Shouldn't be zero"
-
-    _epoch_info.entry_cnt = unsafe_add(_epoch_info.entry_cnt, 1)
-
-    #Write
-    _bid_info: BidInfo = BidInfo({
-        sender: msg.sender,
-        aave_version: _aave_version,
-        chain_id: _chain_id,
-        token_asset: _token_asset
-    })
-    self.bid_info[_active_epoch_num].append(_bid_info)
-    self.my_info[_active_epoch_num][msg.sender] = _bid_info
-
-    # Event Log
-    log Bid(_active_epoch_num, msg.sender, _aave_version, _chain_id, _token_asset)
-
-@external
 @payable
 @nonreentrant("lock")
 def create_bot(swap_infos: DynArray[SwapInfo, MAX_SIZE],
@@ -269,12 +285,15 @@ def create_bot(swap_infos: DynArray[SwapInfo, MAX_SIZE],
         N: uint256, 
         callbacker: address, 
         callback_args: DynArray[uint256, 5], 
+        callback_bytes: Bytes[10**4],
+        is_new_market: bool,
         leverage: uint256, 
         deleverage_percentage: uint256, 
         health_threshold: uint256, 
         expire: uint256, 
         number_trades: uint256, 
-        interval: uint256):
+        interval: uint256,
+        controller_idx: uint256 = 0):
     
     _claimable_amount: uint256 = self.claimable_amount[msg.sender]
     assert _claimable_amount > 0, "No Claimable Amount"
@@ -287,12 +306,15 @@ def create_bot(swap_infos: DynArray[SwapInfo, MAX_SIZE],
         N, 
         callbacker, 
         callback_args, 
+        callback_bytes,
+        is_new_market,
         leverage, 
         deleverage_percentage, 
         health_threshold,
         expire,
         number_trades,
         interval, 
+        controller_idx,
         msg.sender, 
         value=msg.value)
 
