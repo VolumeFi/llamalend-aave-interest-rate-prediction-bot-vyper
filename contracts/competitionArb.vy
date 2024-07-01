@@ -224,14 +224,7 @@ def bid(_token_asset: address):
     assert _token_asset != empty(address), "Invalid"
 
     _epoch_info.entry_cnt = unsafe_add(_epoch_info.entry_cnt, 1)
-
     #Write
-    _bid_info: BidInfo = BidInfo({
-        sender: msg.sender,
-        aave_version: _aave_version,
-        chain_id: _chain_id,
-        token_asset: _token_asset
-    })
     self.bid_info[_active_epoch_num].append(BidInfo({
         # epoch_id: _active_epoch_num,
         sender: msg.sender,
