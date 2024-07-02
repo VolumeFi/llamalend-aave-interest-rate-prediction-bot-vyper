@@ -2,7 +2,7 @@
 #pragma optimize gas
 #pragma evm-version shanghai
 """
-@title      CRV price prediction competition for Juice Bot
+@title      AAVE interest rate prediction competition for Llamalend Bot
 @license    Apache 2.0
 @author     Volume.finance
 """
