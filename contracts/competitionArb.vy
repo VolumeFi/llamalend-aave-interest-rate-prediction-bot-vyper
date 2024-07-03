@@ -39,6 +39,7 @@ DECIMALS: public(immutable(uint256))
 paloma: public(bytes32)
 compass: public(address)
 admin: public(address)
+investor: public(address)
 epoch_cnt: public(uint256)
 active_epoch_num: public(uint256)
 epoch_info: public(HashMap[uint256, EpochInfo])
@@ -103,6 +104,10 @@ event UpdateAdmin:
     old_admin: address
     new_admin: address
 
+event UpdateInvestor:
+    old_investor: address
+    new_investor: address
+
 event SetWinner:
     epoch_id: uint256
     winner: address
@@ -121,14 +126,16 @@ event EmergencyWithdraw:
     amount: uint256
 
 @external
-def __init__(_compass: address, _reward_token: address, _factory: address, _admin: address):
+def __init__(_compass: address, _reward_token: address, _factory: address, _admin: address, _investor: address):
     self.compass = _compass
     self.admin = _admin
+    self.investor = _investor
     REWARD_TOKEN = _reward_token
     DECIMALS = convert(ERC20(_reward_token).decimals(), uint256)
     FACTORY = _factory
     log UpdateCompass(empty(address), _compass)
     log UpdateAdmin(empty(address), _admin)
+    log UpdateInvestor(empty(address), _investor)
 
 @internal
 def _paloma_check():
@@ -138,6 +145,10 @@ def _paloma_check():
 @internal
 def _admin_check():
     assert msg.sender == self.admin, "Not admin"
+
+@internal
+def _investor_check():
+    assert msg.sender == self.investor, "Not investor"
 
 @external
 def update_compass(_new_compass: address):
@@ -150,6 +161,12 @@ def update_admin(_new_admin: address):
     self._admin_check()
     self.admin = _new_admin
     log UpdateAdmin(msg.sender, _new_admin)
+
+@external
+def update_investor(_new_investor: address):
+    self._investor_check()
+    self.investor = _new_investor
+    log UpdateInvestor(msg.sender, _new_investor)
 
 @external
 def set_paloma():
@@ -167,6 +184,7 @@ def emergency_withdraw(_amount: uint256):
 
 @external
 def send_reward(_daily_amount: uint256, _days: uint256):
+    self._investor_check()
     assert _daily_amount > 0, "Invalid Fund Amount"
     assert _days > 0, "Invalid days"
     assert _days <= MAX_FUNDABLE_DAYS, "MAX Fundable Days 5"

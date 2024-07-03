@@ -32,7 +32,7 @@ def test_add():
 
 @pytest.fixture(scope="session")
 def CompetitionArb(Deployer, project, Compass, USDT, Alice, Admin):
-    contract = Deployer.deploy(project.competitionArb, Compass, USDT, Alice, Admin)
+    contract = Deployer.deploy(project.competitionArb, Compass, USDT, Alice, Admin, Deployer)
     funcSig = function_signature("set_paloma()")
     addPayload = encode(["bytes32"], [b'123456'])
     payload = funcSig + addPayload

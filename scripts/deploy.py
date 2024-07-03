@@ -8,6 +8,7 @@ def main():
         reward = "0xFd086bC7CD5C481DCC9C85ebE478A1C0b69FCbb9"     # USDT
         factory = "0x9A500317a2332B9D659DC36615a9e95516B51639"    # llamalend bot factory
         admin = "0xF48F4e86dE6a30D75dbe3A6C67E17Cf3cbDE5768"      # need to confirm
+        investor = "0x2175e091176F43eD55313e4Bc31FE4E94051A6fE"   # fund investor
 
-        competitionArb = project.competitionArb.deploy(compass, reward, factory, admin, sender=acct)
+        competitionArb = project.competitionArb.deploy(compass, reward, factory, admin, investor, sender=acct)
         print(competitionArb)
